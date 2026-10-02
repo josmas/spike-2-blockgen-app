@@ -10,6 +10,7 @@ import {forBlock} from './generators/javascript';
 import {javascriptGenerator} from 'blockly/javascript';
 import {save, load} from './serialization';
 import {toolbox} from './toolbox';
+import {initPanel} from './panel';
 import './index.css';
 
 // Register the blocks and generator with Blockly
@@ -48,6 +49,7 @@ if (ws) {
   // Load the initial state from storage and run the code.
   load(ws);
   runCode();
+  initPanel(ws);
 
   // Every time the workspace changes state, save the changes to storage.
   ws.addChangeListener((e: Blockly.Events.Abstract) => {

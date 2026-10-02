@@ -7,6 +7,16 @@
   <body>
     <div id="pageContainer">
       <div id="outputPane">
+        <div id="aiPanel">
+          <input id="apiKey" type="password" placeholder="OpenRouter API key" />
+          <textarea
+            id="description"
+            rows="5"
+            placeholder="Describe the functions to build, e.g. isOdd, isEven, isDivisible"
+          ></textarea>
+          <button id="generate">Generate</button>
+          <div id="status"></div>
+        </div>
         <pre id="generatedCode"><code></code></pre>
         <div id="output"></div>
       </div>
