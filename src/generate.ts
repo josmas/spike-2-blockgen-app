@@ -1,6 +1,6 @@
 import * as Blockly from 'blockly/core';
 import {appendResponse, functionNames} from './append';
-import {MAX_ATTEMPTS} from './config';
+import {FIRST_TEMPERATURE, MAX_ATTEMPTS, RETRY_TEMPERATURE} from './config';
 import {log} from './log';
 import {chat, ChatMessage, Progress} from './llm/openrouter';
 import {parseResponse} from './llm/parse';
@@ -51,7 +51,12 @@ export async function generate(
     const timer = setInterval(tick, 1000);
     let reply: string;
     try {
-      reply = await chat(messages, apiKey, (p) => (progress = p));
+      reply = await chat(
+        messages,
+        apiKey,
+        (p) => (progress = p),
+        attempt === 1 ? FIRST_TEMPERATURE : RETRY_TEMPERATURE,
+      );
     } finally {
       clearInterval(timer);
     }

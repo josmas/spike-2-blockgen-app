@@ -114,7 +114,7 @@ export const CATALOG: CatalogEntry[] = [
   {type: 'text_reverse', doc: 'value. input TEXT.'},
   {
     type: 'add_text',
-    doc: 'statement. Appends a paragraph with the given value to the output pane. input TEXT. Use it to display demo results.',
+    doc: 'statement. Appends a paragraph to the output pane. input TEXT accepts only text: a text block, text_join, or a function call. A number or boolean expression must be wrapped, e.g. in text_join. Use it to display results.',
   },
   // Lists
   {

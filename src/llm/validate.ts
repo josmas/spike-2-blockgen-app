@@ -3,6 +3,7 @@ import {javascriptGenerator} from 'blockly/javascript';
 import {appendResponse, functionNames, walkBlocks} from '../append';
 import {ALLOWED_TYPES} from './catalog';
 import type {ModelResponse} from './parse';
+import {checkSlots} from './slots';
 
 /**
  * Checks a model response against the real workspace without touching it.
@@ -66,6 +67,8 @@ export function validate(
       errors.push(`Function "${name}" is called but never defined.`);
     }
   }
+  if (errors.length) return [...new Set(errors)];
+  errors.push(...checkSlots(blocks));
   if (errors.length) return [...new Set(errors)];
 
   // 2. Dry run on a copy of the workspace: Blockly rejects bad shapes, then

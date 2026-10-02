@@ -4,8 +4,10 @@ import {
   OPENROUTER_URL,
   REASONING_EFFORT,
   REQUEST_TIMEOUT_MS,
+  RESPONSE_FORMAT,
 } from '../config';
 import {log} from '../log';
+import {RESPONSE_SCHEMA} from './schema';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -18,6 +20,23 @@ export interface Progress {
   content: number;
 }
 
+/** The response_format request field for the configured mode. */
+function responseFormat(): Record<string, unknown> {
+  switch (RESPONSE_FORMAT) {
+    case 'json_schema':
+      return {
+        response_format: {
+          type: 'json_schema',
+          json_schema: {name: 'blockly_workspace', schema: RESPONSE_SCHEMA},
+        },
+      };
+    case 'json_object':
+      return {response_format: {type: 'json_object'}};
+    default:
+      return {};
+  }
+}
+
 /**
  * Sends a streaming chat completion request straight from the browser and
  * returns the full reply text. `onProgress` fires as chunks arrive, so callers
@@ -28,6 +47,7 @@ export async function chat(
   messages: ChatMessage[],
   apiKey: string,
   onProgress?: (progress: Progress) => void,
+  temperature = 0.2,
 ): Promise<string> {
   const controller = new AbortController();
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -45,7 +65,7 @@ export async function chat(
     `${((performance.now() - started) / 1000).toFixed(1)}s`;
   const promptChars = messages.reduce((n, m) => n + m.content.length, 0);
   log(
-    `request: model=${MODEL}, ${messages.length} messages, ${promptChars} chars`,
+    `request: model=${MODEL}, ${messages.length} messages, ${promptChars} chars, temperature=${temperature}, format=${RESPONSE_FORMAT}`,
   );
 
   const progress: Progress = {reasoning: 0, content: 0};
@@ -64,10 +84,11 @@ export async function chat(
       body: JSON.stringify({
         model: MODEL,
         messages,
-        temperature: 0.2,
+        temperature,
         max_tokens: MAX_TOKENS,
         reasoning: {effort: REASONING_EFFORT},
         stream: true,
+        ...responseFormat(),
       }),
       signal: controller.signal,
     });

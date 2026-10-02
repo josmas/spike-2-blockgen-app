@@ -17,3 +17,17 @@ export const REASONING_EFFORT = 'low';
 
 /** Give up on a single request after this long, rather than hanging. */
 export const REQUEST_TIMEOUT_MS = 120_000;
+
+/** First attempt is near-deterministic; retries are warmer so they do not repeat the same mistake. */
+export const FIRST_TEMPERATURE = 0.2;
+export const RETRY_TEMPERATURE = 0.7;
+
+/**
+ * How to ask the provider for well-formed JSON:
+ *   'json_schema' - structured output with RESPONSE_SCHEMA (best, if supported)
+ *   'json_object' - "reply with some JSON object" (widely supported)
+ *   'none'        - no constraint; rely on the prompt and the parser
+ * If requests fail with an error about response_format, try a weaker mode.
+ */
+export const RESPONSE_FORMAT: 'json_schema' | 'json_object' | 'none' =
+  'json_schema';

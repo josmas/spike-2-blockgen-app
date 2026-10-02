@@ -19,7 +19,26 @@ export function parseResponse(text: string): ModelResponse {
   // Skip any prose before the JSON object.
   const start = cleaned.indexOf('{');
   if (start > 0) cleaned = cleaned.slice(start);
-  return JSON.parse(fixJsonStrings(cleaned)) as ModelResponse;
+  const fixed = fixJsonStrings(cleaned);
+  try {
+    return JSON.parse(fixed) as ModelResponse;
+  } catch (e) {
+    throw new Error(describeJsonError(e, fixed));
+  }
+}
+
+/**
+ * Turns "...at position 3493" into a message the model can act on, by
+ * quoting the text around the error. The position alone means nothing to it.
+ */
+function describeJsonError(e: unknown, text: string): string {
+  const message = e instanceof Error ? e.message : String(e);
+  const match = message.match(/position (\d+)/);
+  if (!match) return message;
+  const pos = Number(match[1]);
+  const before = text.slice(Math.max(0, pos - 120), pos);
+  const after = text.slice(pos, pos + 40);
+  return `${message}. The text around the error is: ${before}<<ERROR HERE>>${after}`;
 }
 
 // Character scan that fixes common model mistakes inside strings:
