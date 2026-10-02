@@ -27,7 +27,7 @@ export function initPanel(ws: Blockly.Workspace) {
     const apiKey = keyInput.value.trim();
     const text = description.value.trim();
     if (!apiKey) return show('Enter an OpenRouter API key.', true);
-    if (!text) return show('Describe the functions you want.', true);
+    if (!text) return show('Describe what you want to build.', true);
     window.localStorage?.setItem(KEY_STORAGE, apiKey);
 
     button.disabled = true;

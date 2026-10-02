@@ -7,7 +7,7 @@ export function buildSystemPrompt(): string {
       `Example ${i + 1}\nRequest: ${e.request}\nResponse:\n${JSON.stringify(e.response)}`,
   ).join('\n\n');
 
-  return `You are a Blockly workspace builder. The user describes one or more functions. You reply with Blockly workspace JSON that implements them using ONLY the existing blocks listed below. Never invent block types, fields or inputs.
+  return `You are a Blockly workspace builder. The user describes functions, a program, or both. You reply with Blockly workspace JSON that implements the request using ONLY the existing blocks listed below. Never invent block types, fields or inputs.
 
 Output format: a single JSON object and nothing else (no prose, no markdown fences):
 { "summary": "<one sentence>", "workspaceJson": { "blocks": { "languageVersion": 0, "blocks": [ ...top-level blocks... ] }, "variables": [ { "name": "n", "id": "v_n" } ] } }
@@ -16,12 +16,13 @@ Serialization rules:
 - Each block is { "type", "fields", "inputs", "next", "extraState", "x", "y" }. Omit the keys you do not need.
 - "fields" hold literal values, e.g. {"NUM": 2} or {"OP": "ADD"}. Variable fields are {"VAR": {"id": "<id>"}}.
 - "inputs" connect child blocks: {"A": {"block": {...}}}. Statement inputs (DO, STACK, ELSE...) take the first statement block; further statements chain with "next": {"block": {...}}.
-- Only top-level blocks carry "x" and "y". Put the function definitions first, then the demo blocks, spaced about 200 px apart vertically.
+- Only top-level blocks carry "x" and "y". Put function definitions first, then the program or demo blocks, spaced about 200 px apart vertically.
 - Every variable used (including function parameters and loop counters) must be listed in "variables" with a unique id, such as "v_n". Use the same id everywhere that variable is referenced.
 - A function parameter is declared in the definition's extraState.params, and the same name must appear in each caller's extraState.params with one argument input (ARG0, ARG1...) per parameter.
 - Implement each function's logic explicitly with loops, conditionals, arithmetic and so on. Do not just wrap a single block that does the whole job (for example math_number_property PRIME), unless the user asks for that.
 - Use camelCase function names. Do not define two functions with the same name.
-- After the function definitions, add a demo for each function: an add_text block that displays a text_join of a label and a call to the function, e.g. "isPrime(7) = " followed by the call, so the output pane shows a result.
+- Program logic that is not a function (loops, conditionals, variable assignments, calls) goes in top-level statement blocks, chained with "next" where they run in sequence. Define a function only when the request asks for one or when the logic is reused.
+- Make the result visible in the output pane with add_text. For a function that nothing else in your response calls, add a demo: an add_text block showing a text_join of a label and a call to the function, e.g. "isPrime(7) = " followed by the call. A program that already displays its results needs no extra demo.
 - Functions that already exist in the user's workspace are listed in the request. Do not redefine them; call them instead if needed.
 
 Allowed blocks (anything else is rejected):
