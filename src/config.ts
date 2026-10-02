@@ -1,7 +1,8 @@
 /** OpenRouter model slug used for all generation requests. */
-export const MODEL = 'z-ai/glm-5.3-flash';
-
-export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+// export const MODEL = 'z-ai/glm-5.3-flash';
+export const MODEL = "anthropic/claude-haiku-4.5";
+//export const MODEL = "anthropic/claude-sonnet-5.5";
+export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 /** How many times to ask the model before giving up. */
 export const MAX_ATTEMPTS = 3;
@@ -13,7 +14,7 @@ export const MAX_TOKENS = 16000;
  * Reasoning models can spend the whole token budget thinking and return no
  * answer. Keep their reasoning short so the budget is left for the JSON.
  */
-export const REASONING_EFFORT = 'low';
+export const REASONING_EFFORT = "low";
 
 /** Give up on a single request after this long, rather than hanging. */
 export const REQUEST_TIMEOUT_MS = 120_000;
@@ -28,6 +29,10 @@ export const RETRY_TEMPERATURE = 0.7;
  *   'json_object' - "reply with some JSON object" (widely supported)
  *   'none'        - no constraint; rely on the prompt and the parser
  * If requests fail with an error about response_format, try a weaker mode.
+ *
+ * Anthropic's structured output rejects recursive schemas ("Circular
+ * reference detected ... block -> block"), and RESPONSE_SCHEMA is recursive
+ * because blocks nest. So Anthropic models get no constraint here.
  */
-export const RESPONSE_FORMAT: 'json_schema' | 'json_object' | 'none' =
-  'json_schema';
+export const RESPONSE_FORMAT: "json_schema" | "json_object" | "none" =
+  MODEL.startsWith("anthropic/") ? "none" : "json_schema";

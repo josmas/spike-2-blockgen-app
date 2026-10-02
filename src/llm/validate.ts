@@ -45,6 +45,12 @@ export function validate(
       }
       if (b.type?.startsWith('procedures_def')) {
         const name = b.fields?.NAME;
+        if (typeof name !== 'string' || !name) {
+          errors.push(
+            `A "${b.type}" block has no function name. Give it "fields": {"NAME": "<functionName>"}.`,
+          );
+          return;
+        }
         if (existing.has(name)) {
           errors.push(
             `Function "${name}" already exists in the workspace; call it instead of redefining it, or pick a different name.`,

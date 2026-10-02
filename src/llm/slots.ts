@@ -100,11 +100,26 @@ export function checkSlots(tops: Json[]): string[] {
     if (!ALLOWED_TYPES.has(block.type)) return;
     for (const [name, input] of Object.entries<Json>(block.inputs ?? {})) {
       const child = input?.block ?? input?.shadow;
-      if (!child) continue;
+      if (!child) {
+        errors.push(
+          `Input ${name} of "${block.type}" must be written as {"block": {...}}, with the child block inside a "block" key.`,
+        );
+        continue;
+      }
       const expected = slotKind(block.type, name);
       check(child, expected, `Input ${name} of "${block.type}"`);
       if (expected === 'value') checkTypes(block.type, name, child.type);
       visit(child);
+    }
+    if (block.next && kindOf(block.type) !== 'statement') {
+      errors.push(
+        `"${block.type}" cannot have a "next" block: ${KIND_LABEL[kindOf(block.type)]} has no next connection, so nothing can be chained after it. Put the following blocks at the top level instead.`,
+      );
+    }
+    if (block.next && !block.next.block) {
+      errors.push(
+        `The "next" of "${block.type}" must be written as {"block": {...}}.`,
+      );
     }
     const next = block.next?.block;
     if (next) {
