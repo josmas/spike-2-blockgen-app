@@ -5,17 +5,15 @@
  */
 
 import * as Blockly from 'blockly';
-import {blocks} from './blocks/text';
-import {forBlock} from './generators/javascript';
 import {javascriptGenerator} from 'blockly/javascript';
+import {registerBlocks} from './register';
 import {save, load} from './serialization';
 import {toolbox} from './toolbox';
 import {initPanel} from './panel';
 import './index.css';
 
 // Register the blocks and generator with Blockly
-Blockly.common.defineBlocks(blocks);
-Object.assign(javascriptGenerator.forBlock, forBlock);
+registerBlocks();
 
 // Set up UI elements and inject Blockly
 const codeDiv = document.getElementById('generatedCode')?.firstChild;

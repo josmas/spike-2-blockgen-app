@@ -33,3 +33,6 @@ packages/docs/.docusaurus
 .nx/cache
 .nx/workspace-data
 .nx/migrate-runs
+
+# Benchmark output (scripts/benchmark.ts)
+reports/

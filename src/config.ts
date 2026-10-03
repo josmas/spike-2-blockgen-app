@@ -34,5 +34,27 @@ export const RETRY_TEMPERATURE = 0.7;
  * reference detected ... block -> block"), and RESPONSE_SCHEMA is recursive
  * because blocks nest. So Anthropic models get no constraint here.
  */
-export const RESPONSE_FORMAT: "json_schema" | "json_object" | "none" =
-  MODEL.startsWith("anthropic/") ? "none" : "json_schema";
+export type ResponseFormat = "json_schema" | "json_object" | "none";
+
+export function responseFormatFor(model: string): ResponseFormat {
+  return model.startsWith("anthropic/") ? "none" : "json_schema";
+}
+
+export const RESPONSE_FORMAT: ResponseFormat = responseFormatFor(MODEL);
+
+/**
+ * How the model describes the workspace it wants:
+ *   'nested' - Blockly's own JSON, with blocks written inside their parents.
+ *              Needs the model to close long runs of braces correctly.
+ *   'flat'   - a flat list of blocks that say which block they plug into; the
+ *              app builds the nesting and derives variable ids and mutation
+ *              data. Much easier for smaller models (see src/llm/flat.ts).
+ * Anthropic models cope with nested, so they keep it; everything else gets flat.
+ */
+export type ReplyFormat = "nested" | "flat";
+
+export function replyFormatFor(model: string): ReplyFormat {
+  return model.startsWith("anthropic/") ? "nested" : "flat";
+}
+
+export const REPLY_FORMAT: ReplyFormat = replyFormatFor(MODEL);

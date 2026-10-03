@@ -23,6 +23,26 @@ export function functionNames(ws: Blockly.Workspace): string[] {
     .map((b) => String(b.getFieldValue('NAME')));
 }
 
+/** Parameter names of the functions in a workspace, by function name. */
+export function functionSignatures(
+  ws: Blockly.Workspace,
+): Map<string, string[]> {
+  const signatures = new Map<string, string[]>();
+  for (const b of ws.getAllBlocks(false)) {
+    if (!PROCEDURE_DEFS.includes(b.type)) continue;
+    const state = Blockly.serialization.blocks.save(b, {
+      addInputBlocks: false,
+      addNextBlocks: false,
+    }) as Json | null;
+    const params: Json[] = state?.extraState?.params ?? [];
+    signatures.set(
+      String(b.getFieldValue('NAME')),
+      params.map((p) => String(p.name)),
+    );
+  }
+  return signatures;
+}
+
 /** Calls fn for every serialized block in the tree (inputs and next chains). */
 export function walkBlocks(block: Json, fn: (b: Json) => void): void {
   fn(block);

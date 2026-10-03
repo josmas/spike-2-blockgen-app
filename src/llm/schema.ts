@@ -65,3 +65,45 @@ export const RESPONSE_SCHEMA = {
     },
   },
 };
+
+/**
+ * JSON Schema for the flat reply format (see flat.ts).
+ *
+ * Unlike RESPONSE_SCHEMA it needs no recursion and no open-ended objects:
+ * every object spells out its properties, lists them all as required and
+ * forbids extras, which is what strict structured-output modes (OpenAI,
+ * Google) require. Unused values are "" or [], never null, to avoid unions.
+ */
+export const FLAT_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    summary: {type: 'string'},
+    blocks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: {type: 'string'},
+          type: {type: 'string'},
+          parent: {type: 'string'},
+          slot: {type: 'string'},
+          name: {type: 'string'},
+          params: {type: 'array', items: {type: 'string'}},
+          fields: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {name: {type: 'string'}, value: {type: 'string'}},
+              required: ['name', 'value'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['id', 'type', 'parent', 'slot', 'name', 'params', 'fields'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['summary', 'blocks'],
+  additionalProperties: false,
+};

@@ -11,7 +11,11 @@ export interface ModelResponse {
   };
 }
 
-export function parseResponse(text: string): ModelResponse {
+/**
+ * Parses a model reply as JSON, tolerating markdown fences, prose before the
+ * object, and a few common string mistakes. Used by both reply formats.
+ */
+export function parseJsonLoose(text: string): unknown {
   let cleaned = text.trim();
   // Greedy: first opening fence to the LAST closing fence.
   const fenceMatch = cleaned.match(/```(?:json)?\s*\n([\s\S]*)\n\s*```/);
@@ -21,10 +25,15 @@ export function parseResponse(text: string): ModelResponse {
   if (start > 0) cleaned = cleaned.slice(start);
   const fixed = fixJsonStrings(cleaned);
   try {
-    return JSON.parse(fixed) as ModelResponse;
+    return JSON.parse(fixed);
   } catch (e) {
     throw new Error(describeJsonError(e, fixed));
   }
+}
+
+/** Parses a reply in the nested format. */
+export function parseResponse(text: string): ModelResponse {
+  return parseJsonLoose(text) as ModelResponse;
 }
 
 /**

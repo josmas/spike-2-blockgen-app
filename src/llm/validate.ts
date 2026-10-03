@@ -3,6 +3,7 @@ import {javascriptGenerator} from 'blockly/javascript';
 import {appendResponse, functionNames, walkBlocks} from '../append';
 import {ALLOWED_TYPES} from './catalog';
 import type {ModelResponse} from './parse';
+import {checkRequiredInputs} from './required';
 import {checkSlots} from './slots';
 
 /**
@@ -16,6 +17,9 @@ export function validate(
   const blocks = response?.workspaceJson?.blocks?.blocks;
   if (!Array.isArray(blocks) || blocks.length === 0) {
     return ['workspaceJson.blocks.blocks must be a non-empty array.'];
+  }
+  if (blocks.some((b) => !b || typeof b !== 'object' || Array.isArray(b))) {
+    return ['Every entry of "blocks" must be a block object.'];
   }
 
   // 1. Structural checks: allowed types and function-name collisions.
@@ -75,6 +79,8 @@ export function validate(
   }
   if (errors.length) return [...new Set(errors)];
   errors.push(...checkSlots(blocks));
+  if (errors.length) return [...new Set(errors)];
+  errors.push(...checkRequiredInputs(blocks));
   if (errors.length) return [...new Set(errors)];
 
   // 2. Dry run on a copy of the workspace: Blockly rejects bad shapes, then

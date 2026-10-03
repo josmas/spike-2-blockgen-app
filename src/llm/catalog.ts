@@ -3,6 +3,8 @@
  * the prompt's block catalog and the allow-list used by validation.
  */
 
+import type {ReplyFormat} from '../config';
+
 export interface CatalogEntry {
   type: string;
   doc: string;
@@ -168,9 +170,51 @@ export const CATALOG: CatalogEntry[] = [
   },
 ];
 
+/** What a block plugs into, read from the first word of its catalog entry. */
+export function blockKind(
+  type: string,
+): 'value' | 'statement' | 'top' | undefined {
+  const entry = CATALOG.find((e) => e.type === type);
+  if (!entry) return undefined;
+  if (entry.doc.startsWith('value')) return 'value';
+  if (entry.doc.startsWith('statement')) return 'statement';
+  if (entry.doc.startsWith('top-level')) return 'top';
+  return undefined;
+}
+
 export const ALLOWED_TYPES: ReadonlySet<string> = new Set(
   CATALOG.map((e) => e.type),
 );
 
-export const catalogText = (): string =>
-  CATALOG.map((e) => `- ${e.type}: ${e.doc}`).join('\n');
+/**
+ * In flat mode the model never writes extraState or variable ids, so the
+ * entries that describe them are replaced. Everything else is shared.
+ * "Inputs" are called slots in flat mode.
+ */
+const FLAT_DOCS: Record<string, string> = {
+  controls_if:
+    'statement. slots IF0 (boolean), DO0 (statements); for else-if use IF1/DO1, IF2/DO2...; ELSE (statements).',
+  controls_for:
+    'statement. field VAR = the counter variable\'s name. slots FROM, TO, BY (numbers), DO (statements).',
+  controls_forEach:
+    'statement. field VAR = the item variable\'s name. slots LIST, DO (statements).',
+  text_join: 'value. slots ADD0, ADD1, ... one per item, in order.',
+  text_append: 'statement. field VAR = variable name. slot TEXT.',
+  lists_create_with: 'value. slots ADD0, ADD1, ... one per item, in order.',
+  variables_get: 'value. field VAR = variable name.',
+  variables_set: 'statement. field VAR = variable name. slot VALUE.',
+  math_change: 'statement. field VAR = variable name. slot DELTA.',
+  procedures_defnoreturn:
+    'top-level block. "name" = the function name, "params" = its parameter names. slot STACK (statements).',
+  procedures_defreturn:
+    'top-level block. "name" = the function name, "params" = its parameter names. slots STACK (statements, optional), RETURN (the returned value).',
+  procedures_callnoreturn:
+    'statement. "name" = the function to call. slots ARG0, ARG1... one per parameter of that function, in order.',
+  procedures_callreturn:
+    'value. "name" = the function to call. slots ARG0, ARG1... one per parameter of that function, in order.',
+};
+
+export const catalogText = (format: ReplyFormat = 'nested'): string =>
+  CATALOG.map(
+    (e) => `- ${e.type}: ${format === 'flat' ? (FLAT_DOCS[e.type] ?? e.doc) : e.doc}`,
+  ).join('\n');
