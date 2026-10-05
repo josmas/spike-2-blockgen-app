@@ -116,6 +116,7 @@ export function checkCode(
     }
   }
   const recursiveFunctions = findRecursive(declared);
+  const listVariables = findListVariables(program);
 
   // ---- helpers -----------------------------------------------------------
 
@@ -529,6 +530,17 @@ export function checkCode(
           else count('ok:print');
         } else if (args.length === 0) {
           report(n, 'join:args', 'join needs at least one value, e.g. join("total = ", total).');
+        } else if (
+          args.length === 1 &&
+          (args[0].type === 'ArrayExpression' ||
+            (args[0].type === 'Identifier' && listVariables.has(args[0].name)))
+        ) {
+          const what = args[0].type === 'Identifier' ? `"${args[0].name}" is a list` : 'this is a list';
+          report(
+            n,
+            'join:list',
+            `join(${code.slice(args[0].start, args[0].end)}) is given a list (${what}), but join takes the values to put together, not a list: it would show the items separated by commas. Build the text in a loop instead, e.g. var s = ""; for (var i = 1; i <= ${args[0].type === 'Identifier' ? args[0].name : 'list'}.length; i++) { s = join(s, ${args[0].type === 'Identifier' ? args[0].name : 'list'}[i]); }.`,
+          );
         } else {
           count('ok:join');
         }
@@ -632,6 +644,39 @@ function findRecursive(declared: Map<string, N>): Set<string> {
     }
   }
   return recursive;
+}
+
+/**
+ * Variables that are evidently lists: every assignment in the program gives
+ * them an array literal, and no function uses the name as a parameter or loop
+ * variable. Deliberately cautious: when in doubt a name is not a list, so the
+ * check that uses this never flags a program that is fine.
+ */
+function findListVariables(program: N): Set<string> {
+  const lists = new Set<string>();
+  const notLists = new Set<string>();
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) return node.forEach(visit);
+    const n = node as N;
+    const note = (name: string, value: N | null | undefined, plain: boolean) =>
+      (plain && value?.type === 'ArrayExpression' ? lists : notLists).add(name);
+    if (n.type === 'VariableDeclarator' && n.id.type === 'Identifier') {
+      if (n.init) note(n.id.name, n.init, true);
+    } else if (n.type === 'AssignmentExpression' && n.left.type === 'Identifier') {
+      note(n.left.name, n.right, n.operator === '=');
+    } else if (n.type === 'UpdateExpression' && n.argument.type === 'Identifier') {
+      notLists.add(n.argument.name);
+    } else if (n.type === 'ForOfStatement') {
+      const v = n.left.type === 'VariableDeclaration' ? n.left.declarations[0].id : n.left;
+      if (v.type === 'Identifier') notLists.add(v.name);
+    } else if (n.type === 'FunctionDeclaration') {
+      for (const p of n.params as N[]) if (p.type === 'Identifier') notLists.add(p.name);
+    }
+    for (const [k, v] of Object.entries(n)) if (k !== 'loc') visit(v);
+  };
+  visit(program);
+  return new Set([...lists].filter((name) => !notLists.has(name)));
 }
 
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);

@@ -1,6 +1,6 @@
 /** OpenRouter model slug used for all generation requests. */
-// export const MODEL = 'z-ai/glm-5.3-flash';
-export const MODEL = "anthropic/claude-haiku-4.5";
+export const MODEL = "z-ai/glm-5.3-flash";
+// export const MODEL = "anthropic/claude-haiku-4.5";
 //export const MODEL = "anthropic/claude-sonnet-5.5";
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -51,13 +51,17 @@ export const RESPONSE_FORMAT: ResponseFormat = responseFormatFor(MODEL);
  *              data. Much easier for smaller models (see src/llm/flat.ts).
  *   'code'   - a program in a small JavaScript dialect (src/llm/dialect.ts).
  *              It is checked, translated into blocks (src/llm/codeToBlocks.ts)
- *              and validated like the others. Opt-in: never chosen automatically.
- * Anthropic models cope with nested, so they keep it; everything else gets flat.
+ *              and validated like the others. About 5x faster and 6 to 10x
+ *              cheaper than flat or nested on the models that fail the
+ *              block formats, but it can only express what the dialect covers.
+ * Anthropic models cope with nested (code is only ~1.7x faster for them, and
+ * nested can use any block), so they keep it; everything else gets code.
+ * Flat remains available (--reply-format flat, or the replyFormat option).
  */
 export type ReplyFormat = "nested" | "flat" | "code";
 
 export function replyFormatFor(model: string): ReplyFormat {
-  return model.startsWith("anthropic/") ? "nested" : "flat";
+  return model.startsWith("anthropic/") ? "nested" : "code";
 }
 
 export const REPLY_FORMAT: ReplyFormat = replyFormatFor(MODEL);

@@ -2,6 +2,7 @@ import './helpers/setup';
 import assert from 'node:assert/strict';
 import {describe, it} from 'node:test';
 import {checkCode, toRunnable, violationMessages} from '../../src/llm/codeCheck';
+import {dialectPromptSection} from '../../src/llm/dialect';
 import {runDialect} from './helpers/sandbox';
 import {BUBBLE_SORT, IS_PRIME} from './helpers/fixtures';
 
@@ -57,6 +58,8 @@ describe('code dialect: programs that must be rejected, under the right construc
     ['Math.random', 'var r = Math.random();', ['math:random']],
     ['top-level return is a syntax error', 'return 5;', ['syntax-error']],
     ['broken syntax', 'function (', ['syntax-error']],
+    ['join given a list variable (what Haiku wrote to reverse text)', 'function f(t) { var result = []; for (var i = t.length; i >= 1; i--) { result.push(t[i]); } return join(result); }', ['join:list']],
+    ['join given a list literal', 'print(join([1, 2, 3]));', ['join:list']],
     ['several problems at once', 'const a = [3,1,2];\nconst s = a.sort().map((x) => x * 2);\nconsole.log(`${s}`);', ['decl:const', 'method:sort', 'method:map', 'ArrowFunctionExpression', 'method:log', 'TemplateLiteral']],
   ];
   for (const [name, code, wanted] of cases) {
@@ -89,5 +92,27 @@ describe('1-based rewrite for running the model\'s own program', () => {
   it('makes a 1-based program behave like the dialect says', () => {
     const run = runDialect('var a = [10, 20, 30]; print(join(a[1], a[3]));');
     assert.deepEqual(run.output, ['1030']);
+  });
+});
+
+describe('join takes values, not a list', () => {
+  const flagged = (code: string) => checkCode(code).violations.filter((v) => v.key === 'join:list');
+  it('explains what to write instead, with the line number and the variable', () => {
+    const [v] = flagged('var xs = [];\nxs.push(1);\nprint(join(xs));');
+    assert.match(v.message, /^Line 3: join\(xs\) is given a list/);
+    assert.match(v.message, /s = join\(s, xs\[i\]\)/);
+  });
+  const fine: Array<[string, string]> = [
+    ['one value that is not a list', 'var n = 5; print(join(n));'],
+    ['a list among other values', 'var xs = [1, 2]; print(join("items: ", xs));'],
+    ['an item of a list', 'var xs = [1, 2]; print(join(xs[1]));'],
+    ['a parameter, whose type is unknown', 'function f(x) { return join(x); }'],
+    ['a name that is a list in one place and something else in another', 'var x = []; x = 3; print(join(x));'],
+    ['a loop variable over a list of lists', 'var m = [[1], [2]]; for (var row of m) { print(join(row)); }'],
+    ['text built in a loop, as advised', 'function rev(t) { var s = ""; for (var i = t.length; i >= 1; i--) { s = join(s, t[i]); } return s; }'],
+  ];
+  for (const [name, code] of fine) it(`does not flag ${name}`, () => assert.equal(flagged(code).length, 0));
+  it('the prompt tells the model about it', () => {
+    assert.match(dialectPromptSection(), /join takes the values to put together, not a list/);
   });
 });

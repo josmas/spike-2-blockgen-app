@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {describe, it} from 'node:test';
+import * as acorn from 'acorn';
 import {checkCode} from '../../src/llm/codeCheck';
 import {toRunnable} from '../../src/llm/codeCheck';
 import {TASKS, evaluate} from '../tasks';
@@ -49,11 +50,31 @@ describe('replay: programs real models wrote, through the current checker', {ski
     assert.deepEqual(offenders, []);
   });
 
-  it('rejects every recursive program that keeps locals, so none can reach the translator', () => {
-    for (const {run, code} of programs) {
-      const recursive = checkCode(code).violations.some((v) => v.key === 'recursive-local');
-      if (/mergeSort\(mergeSort|merge\(mergeSort/.test(code)) assert.ok(recursive, `${run.model} ${run.taskId}`);
+  it('never lets a self-recursive function that declares variables through the checker', () => {
+    // Direct recursion only; mutual recursion is covered by the checker's own tests (rules.test.ts).
+    const offenders: string[] = [];
+    let recursive = 0;
+    for (const {report, run, code} of programs) {
+      if (!checkCode(code).ok) continue;
+      const ast = acorn.parse(code, {ecmaVersion: 'latest', sourceType: 'script'}) as Record<string, any>;
+      for (const fn of (ast.body as Array<Record<string, any>>).filter((n) => n.type === 'FunctionDeclaration')) {
+        let calls = false;
+        let declares = false;
+        const visit = (n: unknown): void => {
+          if (!n || typeof n !== 'object') return;
+          if (Array.isArray(n)) return n.forEach(visit);
+          const node = n as Record<string, any>;
+          if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === fn.id.name) calls = true;
+          if (node.type === 'VariableDeclaration') declares = true;
+          Object.values(node).forEach(visit);
+        };
+        visit(fn.body);
+        if (calls) recursive++;
+        if (calls && declares) offenders.push(`${report} ${run.model} ${run.taskId} #${run.trial}: ${fn.id.name}`);
+      }
     }
+    assert.deepEqual(offenders, []);
+    assert.ok(recursive > 0, 'the corpus should contain accepted recursive functions');
   });
 
   it('flags the 0-based text indexing that made the first text probe go wrong', () => {

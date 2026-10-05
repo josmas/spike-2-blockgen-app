@@ -48,7 +48,7 @@ model has had a similar number of runs.
 | Spending cap | $3.00 | `--cap USD` |
 | Requests in flight | 4 (never more than one per model) | `--concurrency N` |
 | Response format | `auto`: what the app uses for that model | `--format auto\|none\|json_object\|json_schema` |
-| Reply format | `auto`: nested for Anthropic models, flat for everything else; `code` is only used when asked for (see below) | `--reply-format auto\|nested\|flat\|code` |
+| Reply format | `auto`: nested for Anthropic models, code for everything else (see below); `flat` only when asked for | `--reply-format auto\|nested\|flat\|code` |
 | Provider routing | OpenRouter default, like the app | `--strict-routing` |
 
 Other flags:

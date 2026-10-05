@@ -67,7 +67,7 @@ export const SUPPORTED: string[] = [
   'Values: numbers, "text" in single or double quotes, true, false, null, and list literals such as [3, 1, 2].',
   'Operators: + - * / %  == != === !== < <= > >=  && || !  and unary minus; and the conditional c ? a : b.',
   'Positions start at 1, for lists AND for text. list[1] is the first item and list.length is the last position; text[1] is the first character and text.length is the last position. Never use position 0 or loops that start at 0. Read and write list items with list[i]; read a character with text[i]. Add an item at the end with list.push(x); (statement only).',
-  'Text: text.length, text[i] (the i-th character, starting at 1), text.toUpperCase(), text.toLowerCase(), text.trim(). Build text with join(a, b, c); never with + or template strings.',
+  'Text: text.length, text[i] (the i-th character, starting at 1), text.toUpperCase(), text.toLowerCase(), text.trim(). Build text with join(a, b, c); never with + or template strings. join takes the values to put together, not a list: to turn a list\'s items (or characters) into text, loop and write s = join(s, item).',
   'Math: Math.abs, Math.sqrt, Math.pow, Math.floor, Math.ceil, Math.round, Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.log, Math.exp, Math.max(a, b, ...), Math.min(a, b, ...), Math.PI, Math.E.',
   'Output: print(value); shows a value in the output pane. print(join("isPrime(7) = ", isPrime(7))); is the usual way to show a result.',
 ];

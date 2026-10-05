@@ -120,7 +120,7 @@ describe('translator: counting loops (guard, strictness, direction, empty ranges
     assert.ok(t.blockTypes.includes('controls_whileUntil') && !t.blockTypes.includes('controls_for'));
   });
   it('writing list items does not change the list\'s length: such a loop stays a count-with loop, even with continue', () => {
-    const code = 'var xs = [3, 0, 5, 0, 7];\nvar n = 0;\nfor (var i = 1; i <= xs.length; i++) { if (xs[i] == 0) { continue; } xs[i] = xs[i] * 2; n += xs[i]; }\nprint(n);\nprint(join(xs));';
+    const code = 'var xs = [3, 0, 5, 0, 7];\nvar n = 0;\nfor (var i = 1; i <= xs.length; i++) { if (xs[i] == 0) { continue; } xs[i] = xs[i] * 2; n += xs[i]; }\nprint(n);\nprint(join(xs[1], ",", xs[2], ",", xs[3], ",", xs[4], ",", xs[5]));';
     const t = same(code, ['30', '6,0,10,0,14']);
     assert.ok(t.blockTypes.includes('controls_for') && !t.blockTypes.includes('controls_whileUntil'));
   });

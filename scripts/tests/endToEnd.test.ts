@@ -1,6 +1,7 @@
 import './helpers/setup';
 import assert from 'node:assert/strict';
 import {afterEach, describe, it} from 'node:test';
+import {replyFormatFor} from '../../src/config';
 import {generate} from '../../src/generate';
 import type {AttemptTrace} from '../../src/generate';
 import {appendResponse, functionNames} from '../../src/append';
@@ -38,9 +39,9 @@ async function run(model: string, replies: FakeReply[], options: {format?: 'nest
   return {ws, traces, summary, error, requests: fake.requests};
 }
 
-describe('generate(): flat format (non-Anthropic models)', () => {
+describe('generate(): flat format (opt-in)', () => {
   it('accepts a correct reply on the first attempt, builds the blocks, and sends the flat schema', async () => {
-    const r = await run('z-ai/glm-5.3-flash', [{text: flatIsEven}]);
+    const r = await run('z-ai/glm-5.3-flash', [{text: flatIsEven}], {format: 'flat'});
     assert.deepEqual(r.traces.map((t) => t.outcome), ['accepted']);
     assert.equal(r.requests[0].format, 'flat');
     assert.equal(r.requests[0].body.response_format.json_schema.name, 'blockly_flat_blocks');
@@ -50,7 +51,7 @@ describe('generate(): flat format (non-Anthropic models)', () => {
   it('rejects a wiring mistake with a message naming the block, then recovers on the retry', async () => {
     const bad = JSON.parse(flatIsEven);
     bad.blocks[3].parent = 'b99';
-    const r = await run('z-ai/glm-5.3-flash', [{text: JSON.stringify(bad)}, {text: flatIsEven}]);
+    const r = await run('z-ai/glm-5.3-flash', [{text: JSON.stringify(bad)}, {text: flatIsEven}], {format: 'flat'});
     assert.deepEqual(r.traces.map((t) => t.outcome), ['rejected', 'accepted']);
     assert.match(r.traces[0].errors[0], /Problem with block "b4": its parent "b99" does not exist/);
     const retryMessage = r.requests[1].body.messages.at(-1).content as string;
@@ -70,9 +71,24 @@ describe('generate(): flat format (non-Anthropic models)', () => {
         {id: 'c5', type: 'math_number', parent: 'c4', slot: 'ARG0', name: '', params: [], fields: [{name: 'NUM', value: '10'}]},
       ],
     });
-    const r = await run('z-ai/glm-5.3-flash', [{text: call}], {ws});
+    const r = await run('z-ai/glm-5.3-flash', [{text: call}], {ws, format: 'flat'});
     assert.deepEqual(r.traces.map((t) => t.outcome), ['accepted']);
     assert.match(r.requests[0].body.messages[1].content, /Functions already in the workspace \(do not redefine\): isEven\(n\)/);
+  });
+});
+
+describe('generate(): the default format per model', () => {
+  it('Anthropic models get nested; every other model gets code', () => {
+    assert.equal(replyFormatFor('anthropic/claude-haiku-4.5'), 'nested');
+    for (const model of ['openai/gpt-5-mini', 'deepseek/deepseek-v4.1-flash', 'z-ai/glm-5.3-flash', 'google/gemini-3-flash-preview']) {
+      assert.equal(replyFormatFor(model), 'code', model);
+    }
+  });
+  it('with no format named, a non-Anthropic model is asked for code and its blocks are built', async () => {
+    const r = await run('z-ai/glm-5.3-flash', [{text: codeReply(BUBBLE_SORT)}]);
+    assert.equal(r.requests[0].format, 'code');
+    assert.deepEqual(r.traces.map((t) => t.outcome), ['accepted']);
+    assert.deepEqual(functionNames(r.ws), ['bubbleSort']);
   });
 });
 
@@ -132,27 +148,27 @@ describe('generate(): code format (checked, translated and built into blocks)', 
 
 describe('generate(): failures', () => {
   it('survives a reply that is not JSON, then recovers', async () => {
-    const r = await run('z-ai/glm-5.3-flash', [{text: 'Sure, here you go'}, {text: flatIsEven}]);
+    const r = await run('z-ai/glm-5.3-flash', [{text: 'Sure, here you go'}, {text: flatIsEven}], {format: 'flat'});
     assert.deepEqual(r.traces.map((t) => t.outcome), ['rejected', 'accepted']);
     assert.match(r.traces[0].errors[0], /not valid JSON/);
   });
 
   it('gives up after three attempts and leaves the workspace untouched', async () => {
-    const r = await run('z-ai/glm-5.3-flash', [{text: 'x'}, {text: 'y'}, {text: 'z'}]);
+    const r = await run('z-ai/glm-5.3-flash', [{text: 'x'}, {text: 'y'}, {text: 'z'}], {format: 'flat'});
     assert.equal(r.traces.length, 3);
     assert.match(r.error ?? '', /Gave up after 3 attempts/);
     assert.equal(r.ws.getAllBlocks(false).length, 0);
   });
 
   it('does not retry when the model runs out of tokens before answering', async () => {
-    const r = await run('z-ai/glm-5.3-flash', [{text: '', finishReason: 'length'}]);
+    const r = await run('z-ai/glm-5.3-flash', [{text: '', finishReason: 'length'}], {format: 'flat'});
     assert.match(r.error ?? '', /ran out of tokens/);
     assert.equal(r.requests.length, 1);
     assert.deepEqual(r.traces.map((t) => t.outcome), ['request-error']);
   });
 
   it('reports an HTTP error and keeps the cost information on the failed attempt', async () => {
-    const r = await run('z-ai/glm-5.3-flash', [{status: 401, body: '{"error":"bad key"}'}]);
+    const r = await run('z-ai/glm-5.3-flash', [{status: 401, body: '{"error":"bad key"}'}], {format: 'flat'});
     assert.match(r.error ?? '', /OpenRouter 401/);
     assert.equal(r.traces[0].outcome, 'request-error');
   });
