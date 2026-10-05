@@ -22,6 +22,7 @@ import {replyFormatFor, responseFormatFor} from '../src/config';
 import type {ReplyFormat, ResponseFormat} from '../src/config';
 import {generate} from '../src/generate';
 import type {AttemptTrace} from '../src/generate';
+import {toRunnable} from '../src/llm/codeCheck';
 import {setLogSink} from '../src/log';
 import type {ChatStats} from '../src/llm/openrouter';
 import {buildSystemPromptFor, buildUserPrompt} from '../src/llm/prompts';
@@ -30,7 +31,7 @@ import {classify} from './classify';
 import {estimateCost, fetchModelInfo} from './pricing';
 import type {ModelInfo} from './pricing';
 import {buildReport} from './report';
-import {summarize, usd} from './summary';
+import {summarize, unsupportedConstructs, usd} from './summary';
 import {TASKS, evaluate} from './tasks';
 import type {Task} from './tasks';
 import type {
@@ -56,6 +57,10 @@ const DEFAULT_MODELS = [
   'stepfun/step-3.5-flash',
   'xiaomi/mimo-v2.6-flash',
 ];
+
+// Tasks run by default. Others (see TASKS in tasks.ts) run only when named with
+// --tasks, so adding a task never changes the size or cost of a default run.
+const DEFAULT_TASK_IDS = ['bubble', 'faster'];
 
 const MAX_STORED_REPLY_CHARS = 200_000;
 
@@ -91,7 +96,7 @@ async function main(): Promise<void> {
   if (args['report-only']) return reportOnly(args['report-only']);
 
   const models = args.models ? args.models.split(',').map((s) => s.trim()) : DEFAULT_MODELS;
-  const taskIds = args.tasks ? args.tasks.split(',').map((s) => s.trim()) : TASKS.map((t) => t.id);
+  const taskIds = args.tasks ? args.tasks.split(',').map((s) => s.trim()) : DEFAULT_TASK_IDS;
   const tasks = taskIds.map((id) => {
     const task = TASKS.find((t) => t.id === id);
     if (!task) throw new Error(`Unknown task "${id}". Known: ${TASKS.map((t) => t.id).join(', ')}`);
@@ -105,8 +110,8 @@ async function main(): Promise<void> {
     throw new Error(`--format must be auto, none, json_object or json_schema (got "${formatArg}")`);
   }
   const replyArg = args['reply-format'] as string;
-  if (!['auto', 'nested', 'flat'].includes(replyArg)) {
-    throw new Error(`--reply-format must be auto, nested or flat (got "${replyArg}")`);
+  if (!['auto', 'nested', 'flat', 'code'].includes(replyArg)) {
+    throw new Error(`--reply-format must be auto, nested, flat or code (got "${replyArg}")`);
   }
   const strictRouting = Boolean(args['strict-routing']);
   const formatFor = (model: string): ResponseFormat =>
@@ -281,6 +286,7 @@ async function main(): Promise<void> {
   fs.writeFileSync(path.join(outDir, 'report.html'), buildReport({meta, results}));
 
   printSummary(results);
+  printConstructs(results);
   console.log(`\nSpent ${usd(spend.usd, 3)} of ${usd(capUsd, 2)}.`);
   console.log(`Report:  ${path.resolve(outDir, 'report.html')}`);
   console.log(`Data:    ${path.resolve(outDir, 'results.json')}`);
@@ -334,8 +340,12 @@ async function runOne(
     return estimateCost(info, inTokens, outTokens);
   };
 
+  // Code format: the program of the accepted attempt, as the model wrote it.
+  let acceptedProgram = null as string | null;
+
   const onAttempt = (t: AttemptTrace): void => {
     const categories: FailureCategory[] = [...new Set(t.errors.map(classify))];
+    if (t.outcome === 'accepted' && t.code) acceptedProgram = t.code.code;
     attempts.push({
       attempt: t.attempt,
       temperature: t.temperature,
@@ -345,6 +355,9 @@ async function runOne(
       reply: t.reply === null ? null : t.reply.slice(0, MAX_STORED_REPLY_CHARS),
       replyChars: t.reply?.length ?? 0,
       stats: t.stats,
+      ...(t.code
+        ? {constructs: t.code.constructs, unsupportedNotes: t.code.unsupportedNotes}
+        : {}),
     });
     if (t.stats?.provider && !providers.includes(t.stats.provider)) providers.push(t.stats.provider);
     const c = attemptCost(t.stats);
@@ -374,8 +387,11 @@ async function runOne(
   let functionNames: string[] = [];
   let programOutput: string[] = [];
   let blockCount: number | null = null;
+  let program: string | null = null;
+  let dialectCorrect: boolean | null = null;
 
   if (accepted) {
+    // Every format is graded on the JavaScript Blockly generates from the blocks.
     code = javascriptGenerator.workspaceToCode(ws);
     const blocks = ws.getAllBlocks(false);
     blockCount = blocks.length;
@@ -384,6 +400,12 @@ async function runOne(
     functionNames = evaluation.functionNames;
     programOutput = evaluation.programOutput;
     status = checks.every((c) => c.passed) ? 'correct' : 'wrong';
+    if (replyFormat === 'code' && acceptedProgram !== null) {
+      // Also grade the program as the model wrote it, so a translation loss
+      // (correct as written, wrong as blocks) shows up in the report.
+      program = acceptedProgram;
+      dialectCorrect = evaluate(task, toRunnable(acceptedProgram), new Set(), {dialect: true}).checks.every((c) => c.passed);
+    }
   }
   ws.dispose();
 
@@ -403,6 +425,8 @@ async function runOne(
     finalError: status === 'correct' || status === 'wrong' ? null : finalError,
     summary,
     code,
+    program,
+    dialectCorrect,
     functionNames,
     blockCount,
     checks,
@@ -439,6 +463,17 @@ function printSummary(results: RunResult[]): void {
   }
   console.log('');
   printTable(rows);
+}
+
+/** Code format: the constructs models used that the dialect does not allow. */
+function printConstructs(results: RunResult[]): void {
+  const top = unsupportedConstructs(results).slice(0, 12);
+  if (top.length === 0) return;
+  console.log('\nUnsupported constructs the models reached for (code format):');
+  printTable([
+    ['construct', 'seen', 'attempts', 'models'],
+    ...top.map((c) => [c.key, String(c.count), String(c.attempts), c.models.map((m) => m.split('/')[1]).join(', ')]),
+  ]);
 }
 
 function printTable(rows: string[][]): void {

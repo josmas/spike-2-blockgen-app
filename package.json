@@ -5,7 +5,9 @@
   "main": "index.js",
   "private": true,
   "scripts": {
-    "test": "echo \"Warning: no test specified\" && exit 0",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --disable-warning=ExperimentalWarning --import ./scripts/register.mjs --test scripts/tests/*.test.ts",
+    "test:full": "FULL=1 npm test",
+    "figures": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --disable-warning=ExperimentalWarning --import ./scripts/register.mjs scripts/figures.ts",
     "build": "webpack --mode production",
     "start": "webpack serve --open --mode development",
     "benchmark": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --disable-warning=ExperimentalWarning --import ./scripts/register.mjs scripts/benchmark.ts"
@@ -36,6 +38,7 @@
     "webpack-dev-server": "^6.0.0"
   },
   "dependencies": {
+    "acorn": "^8.18.0",
     "blockly": "^13.3.0"
   }
 }

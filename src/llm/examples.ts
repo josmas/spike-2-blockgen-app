@@ -302,3 +302,57 @@ export const EXAMPLES: Array<{request: string; response: Json}> = [
   {request: 'A function that tells whether a number is even.', response: isEven},
   {request: 'A function that tells whether a number is prime.', response: isPrime},
 ];
+
+// ---- examples for the code reply format -------------------------------------
+// Written in the dialect (1-based lists, print/join). They are checked and
+// executed in tests, so the model is never shown a program the checker rejects.
+// Deliberately not a sorting algorithm: that is what the benchmark asks for.
+
+export const CODE_EXAMPLES: Array<{request: string; code: string; summary: string}> = [
+  {
+    request: 'A function that tells whether a number is even.',
+    summary: 'isEven(n) returns true when n is divisible by 2, with a demo call.',
+    code: `function isEven(n) {
+  return n % 2 == 0;
+}
+print(join("isEven(4) = ", isEven(4)));`,
+  },
+  {
+    request: 'A function that tells whether a number is prime.',
+    summary: 'isPrime(n) tries every divisor from 2 to n-1 and returns false on the first hit, with a demo call.',
+    code: `function isPrime(n) {
+  if (n < 2) {
+    return false;
+  }
+  for (var i = 2; i <= n - 1; i++) {
+    if (n % i == 0) {
+      return false;
+    }
+  }
+  return true;
+}
+print(join("isPrime(7) = ", isPrime(7)));`,
+  },
+  {
+    request: 'A function that swaps two neighbouring items of a list.',
+    summary: 'swapNeighbors(list, j) swaps the items at positions j and j+1, with a demo call.',
+    code: `function swapNeighbors(list, j) {
+  var temp = list[j];
+  list[j] = list[j + 1];
+  list[j + 1] = temp;
+  return list;
+}
+print(join("swapNeighbors([3, 1, 2], 1) = ", swapNeighbors([3, 1, 2], 1)));`,
+  },
+  {
+    request: 'A function that tells whether a text starts with a given letter.',
+    summary: 'startsWithLetter(text, letter) compares the first character, with a demo call.',
+    code: `function startsWithLetter(text, letter) {
+  if (text.length == 0) {
+    return false;
+  }
+  return text[1] == letter;
+}
+print(join("startsWithLetter(banana, b) = ", startsWithLetter("banana", "b")));`,
+  },
+];

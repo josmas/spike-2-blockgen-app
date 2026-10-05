@@ -66,6 +66,18 @@ export const RESPONSE_SCHEMA = {
   },
 };
 
+/** JSON Schema for the code reply format (see dialect.ts). */
+export const CODE_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    summary: {type: 'string'},
+    code: {type: 'string'},
+    unsupported: {type: 'array', items: {type: 'string'}},
+  },
+  required: ['summary', 'code', 'unsupported'],
+  additionalProperties: false,
+};
+
 /**
  * JSON Schema for the flat reply format (see flat.ts).
  *

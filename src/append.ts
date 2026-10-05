@@ -43,6 +43,23 @@ export function functionSignatures(
   return signatures;
 }
 
+/** Parameters of the functions in a workspace, and whether each returns a value. */
+export function functionInfos(
+  ws: Blockly.Workspace,
+): Map<string, {params: string[]; returns: boolean}> {
+  const infos = new Map<string, {params: string[]; returns: boolean}>();
+  const signatures = functionSignatures(ws);
+  for (const b of ws.getAllBlocks(false)) {
+    if (!PROCEDURE_DEFS.includes(b.type)) continue;
+    const name = String(b.getFieldValue('NAME'));
+    infos.set(name, {
+      params: signatures.get(name) ?? [],
+      returns: b.type === 'procedures_defreturn',
+    });
+  }
+  return infos;
+}
+
 /** Calls fn for every serialized block in the tree (inputs and next chains). */
 export function walkBlocks(block: Json, fn: (b: Json) => void): void {
   fn(block);

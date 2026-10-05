@@ -9,7 +9,11 @@ import {
 } from '../config';
 import type {ReplyFormat, ResponseFormat} from '../config';
 import {log} from '../log';
-import {FLAT_RESPONSE_SCHEMA, RESPONSE_SCHEMA} from './schema';
+import {
+  CODE_RESPONSE_SCHEMA,
+  FLAT_RESPONSE_SCHEMA,
+  RESPONSE_SCHEMA,
+} from './schema';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -86,8 +90,18 @@ function responseFormatField(
         response_format: {
           type: 'json_schema',
           json_schema: {
-            name: reply === 'flat' ? 'blockly_flat_blocks' : 'blockly_workspace',
-            schema: reply === 'flat' ? FLAT_RESPONSE_SCHEMA : RESPONSE_SCHEMA,
+            name:
+              reply === 'flat'
+                ? 'blockly_flat_blocks'
+                : reply === 'code'
+                  ? 'blockly_code_program'
+                  : 'blockly_workspace',
+            schema:
+              reply === 'flat'
+                ? FLAT_RESPONSE_SCHEMA
+                : reply === 'code'
+                  ? CODE_RESPONSE_SCHEMA
+                  : RESPONSE_SCHEMA,
           },
         },
       };

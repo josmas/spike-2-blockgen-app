@@ -1,5 +1,10 @@
 import * as Blockly from 'blockly/core';
-import {appendResponse, functionNames, functionSignatures} from './append';
+import {
+  appendResponse,
+  functionInfos,
+  functionNames,
+  functionSignatures,
+} from './append';
 import {
   FIRST_TEMPERATURE,
   MAX_ATTEMPTS,
@@ -16,6 +21,9 @@ import type {
   Progress,
   ProviderPreferences,
 } from './llm/openrouter';
+import {checkCodeReply} from './llm/codeReply';
+import type {CodeAttemptInfo} from './llm/codeReply';
+import {messagesAboutCode, translateCode, TranslateError} from './llm/codeToBlocks';
 import {buildFromFlat} from './llm/flat';
 import {parseJsonLoose} from './llm/parse';
 import type {ModelResponse} from './llm/parse';
@@ -40,8 +48,10 @@ export interface AttemptTrace {
   /** The model's raw reply; null for request errors. */
   reply: string | null;
   stats: ChatStats | null;
-  /** The parsed reply, for accepted attempts. */
+  /** The parsed reply, for accepted attempts (nested and flat formats). */
   response?: ModelResponse;
+  /** The program and construct counts (code format only). */
+  code?: CodeAttemptInfo;
 }
 
 export interface GenerateOptions {
@@ -75,9 +85,9 @@ export async function generate(
 ): Promise<string> {
   const replyFormat =
     options.replyFormat ?? replyFormatFor(options.model ?? MODEL);
-  // Flat replies need the existing functions' parameters to build calls to them.
+  // Flat and code replies need the existing functions' parameters to call them.
   const existing =
-    replyFormat === 'flat'
+    replyFormat !== 'nested'
       ? [...functionSignatures(ws)].map(
           ([name, params]) => `${name}(${params.join(', ')})`,
         )
@@ -136,9 +146,18 @@ export async function generate(
 
     let errors: string[];
     let response: ModelResponse | undefined;
+    let codeInfo: CodeAttemptInfo | undefined;
     try {
       const parsed = parseJsonLoose(reply);
-      if (replyFormat === 'flat') {
+      if (replyFormat === 'code') {
+        const checked = checkCodeReply(parsed, functionNames(ws));
+        codeInfo = checked.info ?? undefined;
+        errors = checked.errors;
+        if (codeInfo && errors.length === 0) {
+          // The program is inside the dialect: turn it into blocks.
+          ({response, errors} = blocksFromCode(codeInfo.code, checked.summary, ws));
+        }
+      } else if (replyFormat === 'flat') {
         // Build the nested form first; its problems are reported by block id.
         const built = buildFromFlat(parsed, functionSignatures(ws));
         response = built.response ?? undefined;
@@ -173,6 +192,7 @@ export async function generate(
         reply,
         stats,
         response,
+        code: codeInfo,
       });
       return response.summary ?? 'Done.';
     }
@@ -187,6 +207,7 @@ export async function generate(
       errors,
       reply,
       stats,
+      code: codeInfo,
     });
     messages.push(
       {role: 'assistant', content: reply},
@@ -196,4 +217,28 @@ export async function generate(
   throw new Error(
     `Gave up after ${MAX_ATTEMPTS} attempts. Last problems: ${lastErrors.join(' ')}`,
   );
+}
+
+/**
+ * Code format: translates a program that passed the dialect check into blocks
+ * and validates them. Problems are worded about the model's code (by line),
+ * because the model wrote code and has never seen the blocks.
+ */
+function blocksFromCode(
+  code: string,
+  summary: string | undefined,
+  ws: Blockly.Workspace,
+): {response?: ModelResponse; errors: string[]} {
+  try {
+    const {blocks, lineOf} = translateCode(code, functionInfos(ws));
+    const built = buildFromFlat({summary, blocks}, functionSignatures(ws));
+    if (!built.response) {
+      return {errors: messagesAboutCode(built.errors, lineOf)};
+    }
+    const errors = messagesAboutCode(validate(built.response, ws), lineOf);
+    return {response: errors.length ? undefined : built.response, errors};
+  } catch (e) {
+    if (e instanceof TranslateError) return {errors: [e.message]};
+    throw e;
+  }
 }

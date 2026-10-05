@@ -6,7 +6,8 @@ import {
   RETRY_TEMPERATURE,
 } from '../src/config';
 import {CATEGORY_LABELS} from './classify';
-import {pct, summarize, usd} from './summary';
+import {HINTS} from '../src/llm/dialect';
+import {pct, statedLimitations, summarize, supportedConstructs, unsupportedConstructs, usd} from './summary';
 import type {ModelSummary} from './summary';
 import {TASKS} from './tasks';
 import type {FailureCategory, ResultsFile, RunResult, RunStatus} from './types';
@@ -68,6 +69,8 @@ export function buildReport(file: ResultsFile): string {
   Darker means more.</p>
   ${heatmap(summaries)}
 </section>
+
+${codeSections(results)}
 
 <section class="card">
   <h2>All numbers</h2>
@@ -233,6 +236,39 @@ function statsTable(
   return `<div class="scroll"><table class="stats" id="stats"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
+/** Code reply format: what models wrote outside the dialect, and what they said they could not do. */
+function codeSections(results: RunResult[]): string {
+  const unsupported = unsupportedConstructs(results);
+  const supported = supportedConstructs(results);
+  const limits = statedLimitations(results);
+  if (unsupported.length === 0 && supported.length === 0 && limits.length === 0) return '';
+
+  const rows = unsupported
+    .map(
+      (c) => `<tr><th scope="row"><code>${esc(c.key)}</code></th><td>${c.count}</td><td>${c.attempts}</td><td>${esc(c.models.map((m) => m.split('/')[1]).join(', '))}</td><td class="wrap">${esc(HINTS[c.key] ?? '')}</td></tr>`,
+    )
+    .join('');
+  const table = unsupported.length
+    ? `<div class="scroll"><table><thead><tr><th scope="col">Construct</th><th scope="col">Times seen</th><th scope="col">Attempts</th><th scope="col">Models</th><th scope="col">Suggested instead</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : '<p class="note">Every program stayed inside the dialect.</p>';
+
+  return `<section class="card">
+  <h2>Outside the dialect (code format)</h2>
+  <p class="note">Constructs models wrote that the dialect does not allow, most widespread first. This is the list to work from when deciding what to add to the dialect and the translator.</p>
+  ${table}
+  ${
+    limits.length
+      ? `<h3>What models said they could not express</h3><ul>${limits.map((l) => `<li>${esc(l.note)} <span class="small">(${l.count}×, ${esc(l.models.map((m) => m.split('/')[1]).join(', '))})</span></li>`).join('')}</ul>`
+      : ''
+  }
+  ${
+    supported.length
+      ? `<details><summary>Constructs that were allowed, for context</summary><div class="scroll"><table><thead><tr><th scope="col">Construct</th><th scope="col">Times seen</th><th scope="col">Attempts</th></tr></thead><tbody>${supported.map((c) => `<tr><th scope="row"><code>${esc(c.key)}</code></th><td>${c.count}</td><td>${c.attempts}</td></tr>`).join('')}</tbody></table></div></details>`
+      : ''
+  }
+</section>`;
+}
+
 function runFilters(runs: RunResult[], taskLabel: (id: string) => string): string {
   const options = (values: string[], label: (v: string) => string) =>
     ['<option value="">All</option>', ...values.map((v) => `<option value="${attr(v)}">${esc(label(v))}</option>`)].join('');
@@ -321,6 +357,7 @@ body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 sys
 main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; }
 h1 { font-size: 28px; margin: 0 0 4px; }
 h2 { font-size: 17px; margin: 0 0 4px; }
+h3 { font-size: 15px; margin: 16px 0 4px; }
 .sub, .note { color: var(--ink2); margin: 0 0 12px; font-size: 14px; }
 .small { color: var(--ink2); font-size: 13px; }
 .card, .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
@@ -354,6 +391,7 @@ h2 { font-size: 17px; margin: 0 0 4px; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; }
 .stats td { font-variant-numeric: tabular-nums; }
+td.wrap { white-space: normal; min-width: 260px; }
 .heat th[scope=row] { font-weight: 400; color: var(--ink2); max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .heat thead th { font-weight: 500; color: var(--ink2); white-space: normal; min-width: 90px; vertical-align: bottom; }
 .heat td { text-align: center; background: color-mix(in srgb, var(--series) calc(var(--v) * 100%), var(--surface)); font-variant-numeric: tabular-nums; }

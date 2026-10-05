@@ -1,12 +1,15 @@
 import type {ReplyFormat} from '../config';
 import {catalogText} from './catalog';
-import {EXAMPLES, FLAT_EXTRA_EXAMPLES} from './examples';
+import {CODE_EXAMPLES, EXAMPLES, FLAT_EXTRA_EXAMPLES} from './examples';
+import {dialectPromptSection} from './dialect';
 import {formatFlat, nestedToFlat} from './flat';
 import type {ModelResponse} from './parse';
 
 /** The system prompt for a reply format. */
 export function buildSystemPromptFor(format: ReplyFormat): string {
-  return format === 'flat' ? buildFlatSystemPrompt() : buildSystemPrompt();
+  if (format === 'flat') return buildFlatSystemPrompt();
+  if (format === 'code') return buildCodeSystemPrompt();
+  return buildSystemPrompt();
 }
 
 export function buildSystemPrompt(): string {
@@ -89,6 +92,34 @@ ${examples}
 Respond with the JSON object only, one block per line.`;
 }
 
+/** The system prompt for the code reply format (see dialect.ts). */
+function buildCodeSystemPrompt(): string {
+  const examples = CODE_EXAMPLES.map(
+    (e, i) =>
+      `Example ${i + 1}\nRequest: ${e.request}\nResponse:\n${JSON.stringify({summary: e.summary, code: e.code, unsupported: []})}`,
+  ).join('\n\n');
+
+  return `You are a program writer for a block-based language. The user describes functions, a program, or both. You reply with a small JavaScript program that implements the request, written in the restricted dialect below. The program is converted into blocks, so anything outside the dialect is rejected.
+
+Output format: a single JSON object and nothing else (no prose, no markdown fences):
+{"summary":"<one sentence>","code":"<the whole program as ONE JSON string, with \\n for line breaks>","unsupported":[ ... ]}
+
+The dialect:
+${dialectPromptSection()}
+
+Rules:
+- Implement each function's logic explicitly with loops, conditionals and arithmetic. Do not look for a built-in that does the whole job.
+- Use camelCase function names. Do not define two functions with the same name.
+- Define a function only when the request asks for one or when the logic is reused; otherwise write top-level statements.
+- Make the result visible with print. For a function that nothing else calls, add a demo call such as print(join("isPrime(7) = ", isPrime(7)));.
+- Functions that already exist in the user's workspace are listed in the request with their parameters. Do not redefine them; call them instead if needed.
+- If the request needs something the dialect cannot express, write the closest program you can using only the dialect, and describe each thing you could not do as a short sentence in "unsupported". Use [] when nothing is missing. Never use a construct outside the dialect.
+
+${examples}
+
+Respond with the JSON object only.`;
+}
+
 export function buildUserPrompt(
   description: string,
   existingFunctions: string[],
@@ -103,6 +134,10 @@ export function buildRetryPrompt(
   errors: string[],
   format: ReplyFormat = 'nested',
 ): string {
+  const codeHint =
+    format === 'code' && errors.length > 0
+      ? '\nRewrite the program using only the dialect, keeping the same behaviour.\n'
+      : '';
   const wiringHint =
     format === 'flat' &&
     errors.some((e) => e.startsWith('Problem with block') || e.includes('is empty'))
@@ -113,5 +148,5 @@ export function buildRetryPrompt(
       ? '\nReturn the whole JSON object again from the start, with one block per line and every property present on every block.\n'
       : '\nThe JSON is deeply nested, so count your brackets: every { and [ must be closed, and elements need commas between them. Write the whole object again from the start.\n'
     : '';
-  return `Your previous response had problems:\n${errors.map((e) => `- ${e}`).join('\n')}\n${syntaxHint}${wiringHint}\nFix them and return the complete corrected JSON object, with no other text.`;
+  return `Your previous response had problems:\n${errors.map((e) => `- ${e}`).join('\n')}\n${syntaxHint}${wiringHint}${codeHint}\nFix them and return the complete corrected JSON object, with no other text.`;
 }

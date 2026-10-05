@@ -9,10 +9,13 @@ import type {CheckResult} from './types';
  * boundary; this runs model-written code on your machine, with no access to
  * require/process/fs/network from inside the context, which is acceptable for
  * a local benchmark but would not be for untrusted code in general.
+ *
+ * Blockly's code runs inside a function (see scoped()); the model's own
+ * program in the code dialect (options.dialect) runs as it is.
  */
 
 /** Helper functions Blockly itself adds to the output. */
-const HELPERS = new Set(['addText']);
+const HELPERS = new Set(['addText', 'print', 'join']);
 
 export interface Execution {
   context: vm.Context;
@@ -29,9 +32,44 @@ export function definedFunctions(code: string): string[] {
   return names;
 }
 
-export function execute(code: string, timeoutMs = 3000): Execution {
+export interface ExecuteOptions {
+  /**
+   * Provide print() and join() as the code dialect defines them (see
+   * src/llm/dialect.ts), for running the model's own program instead of the
+   * JavaScript Blockly generated.
+   */
+  dialect?: boolean;
+}
+
+/**
+ * Runs Blockly's generated code inside a function, with its user-defined
+ * functions re-exposed on the global object so the checks can call them.
+ *
+ * Why: Blockly declares every variable with a top-level `var`. In a node:vm
+ * context, top-level variables are properties of the context's global object,
+ * and each access goes through the vm interceptors: about 250x slower than a
+ * local (insertion sort of 20,000 numbers: 44 s against 0.17 s). A browser has
+ * no such penalty, so running it like this measures the blocks' algorithm, not
+ * the sandbox. The semantics are the same: one scope, everything hoisted.
+ */
+function scoped(code: string): string {
+  const exposed = definedFunctions(code).map((name) => `globalThis.${name} = ${name};`);
+  return `(function () {\n${code}\n${exposed.join('\n')}\n})();`;
+}
+
+export function execute(
+  code: string,
+  timeoutMs = 3000,
+  options: ExecuteOptions = {},
+): Execution {
   const output: string[] = [];
-  const sandbox = {
+  const sandbox: Record<string, unknown> = {
+    ...(options.dialect
+      ? {
+          print: (value: unknown) => output.push(String(value)),
+          join: (...parts: unknown[]) => parts.map(String).join(''),
+        }
+      : {}),
     document: {
       getElementById: () => ({
         appendChild: (el: {innerText: unknown}) => {
@@ -44,7 +82,7 @@ export function execute(code: string, timeoutMs = 3000): Execution {
   const context = vm.createContext(sandbox);
   let runtimeError: string | null = null;
   try {
-    vm.runInContext(code, context, {timeout: timeoutMs});
+    vm.runInContext(options.dialect ? code : scoped(code), context, {timeout: timeoutMs});
   } catch (e) {
     runtimeError = e instanceof Error ? e.message : String(e);
   }
@@ -156,4 +194,52 @@ export function checkSorts(
     });
   }
   return results;
+}
+
+// ---- function checks ---------------------------------------------------------
+
+/** One call to check. `args` are JSON values; `expect` is the exact result. */
+export interface CallCase {
+  args: unknown[];
+  expect: unknown;
+  /**
+   * Compare as text: a result of 7 equals the expected "7". For requests that
+   * say "as text", where a model may reasonably return either.
+   */
+  asText?: true;
+}
+
+/** Calls `fnName` with each case's arguments and compares the result. */
+export function checkCalls(
+  exec: Execution,
+  fnName: string,
+  cases: CallCase[],
+  label: string,
+): CheckResult {
+  if (!IDENTIFIER.test(fnName)) {
+    return {name: label, passed: false, detail: `bad function name ${fnName}`};
+  }
+  for (const c of cases) {
+    const script = `JSON.stringify(${fnName}(${c.args.map((a) => JSON.stringify(a)).join(', ')}))`;
+    const called = run(exec.context, script, 1000);
+    const shown = `${fnName}(${c.args.map((a) => JSON.stringify(a)).join(', ')})`;
+    if (!called.ok) {
+      return {
+        name: label,
+        passed: false,
+        detail: `${shown}: ${called.timedOut ? 'did not finish within 1s' : called.error}`,
+      };
+    }
+    const same = c.asText
+      ? String(JSON.parse(String(called.value))) === String(c.expect)
+      : called.value === JSON.stringify(c.expect);
+    if (!same) {
+      return {
+        name: label,
+        passed: false,
+        detail: `${shown}: got ${String(called.value).slice(0, 60)}, expected ${JSON.stringify(c.expect)}`,
+      };
+    }
+  }
+  return {name: label, passed: true, detail: `${cases.length} calls`};
 }

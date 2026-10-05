@@ -49,9 +49,12 @@ export const RESPONSE_FORMAT: ResponseFormat = responseFormatFor(MODEL);
  *   'flat'   - a flat list of blocks that say which block they plug into; the
  *              app builds the nesting and derives variable ids and mutation
  *              data. Much easier for smaller models (see src/llm/flat.ts).
+ *   'code'   - a program in a small JavaScript dialect (src/llm/dialect.ts).
+ *              It is checked, translated into blocks (src/llm/codeToBlocks.ts)
+ *              and validated like the others. Opt-in: never chosen automatically.
  * Anthropic models cope with nested, so they keep it; everything else gets flat.
  */
-export type ReplyFormat = "nested" | "flat";
+export type ReplyFormat = "nested" | "flat" | "code";
 
 export function replyFormatFor(model: string): ReplyFormat {
   return model.startsWith("anthropic/") ? "nested" : "flat";

@@ -96,3 +96,70 @@ export const usd = (value: number | null, digits = 4): string =>
 
 export const pct = (part: number, whole: number): string =>
   whole ? `${Math.round((part / whole) * 100)}%` : 'n/a';
+
+// ---- code format: what models reached for ------------------------------------
+
+export interface ConstructStat {
+  key: string;
+  /** Times it appeared across all attempts. */
+  count: number;
+  /** Attempts it appeared in. */
+  attempts: number;
+  models: string[];
+}
+
+function aggregateConstructs(
+  results: RunResult[],
+  keep: (key: string) => boolean,
+): ConstructStat[] {
+  const stats = new Map<string, {count: number; attempts: number; models: Set<string>}>();
+  for (const r of results) {
+    if (r.status === 'aborted') continue;
+    for (const a of r.attempts) {
+      for (const [key, n] of Object.entries(a.constructs ?? {})) {
+        if (!keep(key)) continue;
+        const s = stats.get(key) ?? {count: 0, attempts: 0, models: new Set<string>()};
+        s.count += n;
+        s.attempts += 1;
+        s.models.add(r.model);
+        stats.set(key, s);
+      }
+    }
+  }
+  return [...stats]
+    .map(([key, s]) => ({key, count: s.count, attempts: s.attempts, models: [...s.models]}))
+    .sort((a, b) => b.attempts - a.attempts || b.count - a.count || a.key.localeCompare(b.key));
+}
+
+/** Constructs the dialect rejected, most widespread first. */
+export const unsupportedConstructs = (results: RunResult[]): ConstructStat[] =>
+  aggregateConstructs(results, (key) => !key.startsWith('ok:'));
+
+/** Constructs the dialect accepted, for context ("ok:" prefix removed). */
+export const supportedConstructs = (results: RunResult[]): ConstructStat[] =>
+  aggregateConstructs(results, (key) => key.startsWith('ok:')).map((c) => ({
+    ...c,
+    key: c.key.slice(3),
+  }));
+
+/** What models said they could not express, in their own words. */
+export function statedLimitations(
+  results: RunResult[],
+): Array<{note: string; count: number; models: string[]}> {
+  const notes = new Map<string, {note: string; count: number; models: Set<string>}>();
+  for (const r of results) {
+    if (r.status === 'aborted') continue;
+    for (const a of r.attempts) {
+      for (const note of a.unsupportedNotes ?? []) {
+        const k = note.trim().toLowerCase();
+        const n = notes.get(k) ?? {note: note.trim(), count: 0, models: new Set<string>()};
+        n.count += 1;
+        n.models.add(r.model);
+        notes.set(k, n);
+      }
+    }
+  }
+  return [...notes.values()]
+    .map((n) => ({note: n.note, count: n.count, models: [...n.models]}))
+    .sort((a, b) => b.count - a.count);
+}

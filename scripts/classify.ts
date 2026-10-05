@@ -6,9 +6,30 @@ import type {FailureCategory} from './types';
  * Order matters: more specific patterns come first.
  */
 export function classify(error: string): FailureCategory {
+  // Code reply format: "Line 7: ..." problems. The checker (codeCheck.ts) and
+  // the translator (codeToBlocks.ts) both write them, as do validator errors
+  // reworded about the code. Only the specific phrases below are looked for:
+  // the checker's hints contain words (such as "function name") that the
+  // general rules further down would misread.
+  const line = /^Line \d+: ([\s\S]*)$/.exec(error);
+  if (line) {
+    const text = line[1];
+    if (
+      /does not return a value|takes \d+ values? \(|counts (up|down) but|not a plain counting loop|also uses continue|cannot be turned into blocks|cannot be a statement|to add to text, write/.test(
+        text,
+      )
+    ) {
+      return 'untranslatable';
+    }
+    if (/accepts \[/.test(text)) return 'type-mismatch';
+    if (/neither defined/.test(text)) return 'function-names';
+    if (/is empty; (it needs a block|add a block)/.test(text)) return 'empty-input';
+    return 'unsupported-syntax';
+  }
   // Flat reply format: problems found while wiring blocks together (flat.ts).
   if (/^Problem with (block|the block list)/.test(error)) return 'flat-structure';
   if (/is empty; (it needs a block|add a block)/.test(error)) return 'empty-input';
+  if (/^The reply must be a JSON object with a "code"/.test(error)) return 'invalid-json';
   if (/not valid JSON/i.test(error)) return 'invalid-json';
   if (/ran out of tokens/i.test(error)) return 'out-of-tokens';
   if (/No data from the model/i.test(error)) return 'timeout';
@@ -50,6 +71,8 @@ export const CATEGORY_LABELS: Record<FailureCategory, string> = {
   'wrong-slot': 'Block in wrong slot',
   'flat-structure': 'Flat wiring error',
   'empty-input': 'Empty required input',
+  'unsupported-syntax': 'Unsupported syntax',
+  untranslatable: 'Not expressible as blocks',
   'type-mismatch': 'Value type mismatch',
   'function-names': 'Function names',
   variables: 'Undeclared variable',

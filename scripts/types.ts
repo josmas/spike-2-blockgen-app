@@ -8,6 +8,8 @@ export type FailureCategory =
   | 'type-mismatch'
   | 'function-names'
   | 'variables'
+  | 'unsupported-syntax'
+  | 'untranslatable'
   | 'flat-structure'
   | 'empty-input'
   | 'blockly-load'
@@ -28,6 +30,10 @@ export interface AttemptRecord {
   reply: string | null;
   replyChars: number;
   stats: ChatStats | null;
+  /** Code format only: how often each construct appeared in this attempt. */
+  constructs?: Record<string, number>;
+  /** Code format only: what the model said it could not express. */
+  unsupportedNotes?: string[];
 }
 
 /** One check run against the accepted program. */
@@ -68,6 +74,13 @@ export interface RunResult {
   summary: string | null;
   /** JavaScript Blockly generated from the accepted workspace. */
   code: string | null;
+  /**
+   * Code format only: the program the model wrote, in the dialect (1-based
+   * lists). Reports saved before the translator existed have it in `code`.
+   */
+  program?: string | null;
+  /** Code format only: did the program, run as written, pass every check? */
+  dialectCorrect?: boolean | null;
   functionNames: string[];
   blockCount: number | null;
   checks: CheckResult[];

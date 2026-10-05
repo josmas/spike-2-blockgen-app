@@ -59,6 +59,10 @@ const CALL_TYPES = new Set(['procedures_callnoreturn', 'procedures_callreturn'])
 /** Slots that hold statements; every other slot holds a value. */
 const STATEMENT_SLOT = /^(?:DO\d*|ELSE|STACK|next)$/;
 
+/** ELSE holds statements on controls_if, but is a value slot on logic_ternary. */
+const isStatementSlot = (slot: string, parentType: string): boolean =>
+  slot === 'ELSE' ? parentType === 'controls_if' : STATEMENT_SLOT.test(slot);
+
 const text = (v: unknown): string =>
   v === null || v === undefined ? '' : String(v);
 
@@ -141,7 +145,7 @@ function slotTakenMessage(
   const head = `Problem with block "${b.id}": slot "${b.slot}" of "${b.parent}" already holds "${holder.id}" (${holder.type}), and a slot holds only one block.`;
   const hints: string[] = [];
   const duplicate =
-    !STATEMENT_SLOT.test(b.slot) &&
+    !isStatementSlot(b.slot, holder.type) &&
     holder.type === b.type &&
     holder.name === b.name &&
     JSON.stringify(holder.fields) === JSON.stringify(b.fields);
@@ -157,7 +161,7 @@ function slotTakenMessage(
     hints.push(
       `A statement has only one follower: chain "${b.id}" after "${holder.id}" (parent "${holder.id}", slot "next") or after the last statement of that chain.`,
     );
-  } else if (STATEMENT_SLOT.test(b.slot)) {
+  } else if (isStatementSlot(b.slot, holder.type)) {
     hints.push(
       `To put several statements in a slot, give the first one that slot and chain each further one after the previous with slot "next".`,
     );
@@ -283,11 +287,11 @@ export function buildFromFlat(
           `Problem with block "${b.id}": "${b.type}" is a value block and cannot use slot "next". A value block plugs into an input slot of its parent (such as A, B, VALUE or AT).`,
         );
       }
-    } else if (STATEMENT_SLOT.test(b.slot) && kind === 'value') {
+    } else if (isStatementSlot(b.slot, parent.type) && kind === 'value') {
       errors.push(
         `Problem with block "${b.id}": "${b.type}" is a value block, but slot "${b.slot}" of "${b.parent}" holds statements. Put it in a value slot, or wrap it in a block that consumes it.`,
       );
-    } else if (!STATEMENT_SLOT.test(b.slot) && kind === 'statement') {
+    } else if (!isStatementSlot(b.slot, parent.type) && kind === 'statement') {
       errors.push(
         `Problem with block "${b.id}": "${b.type}" is a statement block, but slot "${b.slot}" of "${b.parent}" holds a value. Put it in a statement slot, after another statement with "next", or at top level.`,
       );
@@ -332,6 +336,7 @@ export function buildFromFlat(
         );
       } else {
         for (const child of children.get(b.id) ?? []) {
+          if (child.slot === 'next') continue; // a call is a statement too: it can have a follower
           const m = /^ARG(\d+)$/.exec(child.slot);
           if (!m || Number(m[1]) >= signature.length) {
             errors.push(

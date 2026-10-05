@@ -76,6 +76,7 @@ export function checkSlots(tops: Json[]): string[] {
     parentType: string,
     inputName: string,
     childType: string,
+    childId?: string,
   ): void => {
     if (!ALLOWED_TYPES.has(childType) || kindOf(childType) !== 'value') return;
     const parent = scratch.newBlock(parentType);
@@ -84,7 +85,7 @@ export function checkSlots(tops: Json[]): string[] {
     const out = child.outputConnection;
     if (slot && out && !scratch.connectionChecker.doTypeChecks(slot, out)) {
       errors.push(
-        `Input ${inputName} of "${parentType}" accepts ${JSON.stringify(slot.getCheck())}, but "${childType}" produces ${JSON.stringify(out.getCheck())}. ${hint(slot.getCheck())}`,
+        `${childId ? `Problem with block "${childId}": i` : 'I'}nput ${inputName} of "${parentType}" accepts ${JSON.stringify(slot.getCheck())}, but "${childType}" produces ${JSON.stringify(out.getCheck())}. ${hint(slot.getCheck())}`,
       );
     }
     parent.dispose();
@@ -108,7 +109,7 @@ export function checkSlots(tops: Json[]): string[] {
       }
       const expected = slotKind(block.type, name);
       check(child, expected, `Input ${name} of "${block.type}"`);
-      if (expected === 'value') checkTypes(block.type, name, child.type);
+      if (expected === 'value') checkTypes(block.type, name, child.type, child.id);
       visit(child);
     }
     if (block.next && kindOf(block.type) !== 'statement') {
